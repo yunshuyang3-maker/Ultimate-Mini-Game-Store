@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Ultimate 30-Game Arcade</title>
+<style>
+:root{
+  --bg1:#141e30; --bg2:#243b55; --panel:rgba(255,255,255,0.08);
+  --btn:#0f3460; --accent:#00ffff; --glow:0 0 15px var(--accent);
+}
+body{
+  margin:0; font-family:Arial,sans-serif;
+  background:linear-gradient(135deg,var(--bg1),var(--bg2));
+  color:white; text-align:center; min-height:100vh; transition:background 0.5s;
+}
+h1{ text-shadow:0 0 20px var(--accent);}
+button,select,input{
+  padding:14px;border-radius:12px;border:none;background:var(--btn);
+  color:white;margin:6px;font-size:16px;cursor:pointer;transition:0.2s;
+}
+button:hover, select:hover{ box-shadow:var(--glow); transform:scale(1.05);}
+button:active{ transform:scale(.95);}
+#games{display:grid;grid-template-columns:1fr;gap:10px;max-width:900px;margin:auto;transition:opacity 0.3s;}
+#gameArea,#leaderboard,#profile,#achievements{display:none; opacity:0; transition:opacity 0.5s;}
+#playField{position:relative;width:95%;height:55vh;margin:15px auto;background:var(--panel);border-radius:18px;overflow:hidden;box-shadow:0 0 20px rgba(0,0,0,0.5);}
+.moving,.falling{position:absolute;border-radius:14px;cursor:pointer;box-shadow:0 0 12px #fff;}
+.card{background:var(--panel);border-radius:14px;padding:14px;margin:12px auto;max-width:500px;box-shadow:0 0 20px rgba(0,0,0,0.5);transition:0.3s;}
+.card:hover{ box-shadow:0 0 30px var(--accent);}
+#progressBar{width:90%;height:20px;margin:10px auto;background:rgba(255,255,255,0.2);border-radius:10px;overflow:hidden;}
+#progressFill{width:0%;height:100%;background:lime;transition:width 0.5s;}
+@media(min-width:600px){#games{grid-template-columns:repeat(3,1fr);}}
+@media(min-width:900px){#games{grid-template-columns:repeat(4,1fr);}}
+</style>
+</head>
+<body>
+<h1>🎮 Ultimate 30-Game Arcade</h1>
+
+<div class="card" id="playerCard">
+👤 <b id="playerName"></b><br>
+🎮 Games Played: <span id="gamesPlayed">0</span><br>
+⭐ Total Score: <span id="totalScore">0</span>
+</div>
+
+<div id="progressBar"><div id="progressFill"></div></div>
+<p id="progressText"></p>
+
+<select id="difficulty">
+  <option value="easy">🟢 Easy</option>
+  <option value="medium">🟡 Medium</option>
+  <option value="hard">🔴 Hard</option>
+</select>
+
+<select id="themeSelector">
+  <option value="neon">🌌 Neon</option>
+  <option value="dark">🌙 Dark</option>
+  <option value="retro">🌈 Retro</option>
+</select>
+
+<br>
+<button id="musicToggle">🎵 Music</button>
+<button id="profileBtn">👤 Profile</button>
+<button id="achBtn">🏆 Achievements</button>
+<button id="boardBtn">📊 Leaderboard</button>
+
+<div id="games"></div>
+
+<div id="gameArea" class="card">
+  <h2 id="gameTitle"></h2>
+  <p>Score: <b id="score">0</b> | Time: <b id="time">0</b> | Combo: <b id="combo">0</b></p>
+  <div id="playField"></div>
+  <button id="pauseBtn">⏸ Pause</button>
+  <button id="restartBtn">🔄 Restart</button>
+  <button id="exitBtn">Exit</button>
+</div>
+
+<div id="leaderboard" class="card">
+  <h2>📊 Leaderboard</h2>
+  <div id="scores"></div>
+  <button id="boardBack">Back</button>
+</div>
+
+<div id="profile" class="card">
+  <h2>👤 Profile</h2>
+  Username: <input id="nameInput" aria-label="username"><br>
+  <button id="saveNameBtn">Save</button>
+  <button id="profileBack">Back</button>
+</div>
+
+<div id="achievements" class="card">
+  <h2>🏆 Achievements</h2>
+  <div id="achList"></div>
+  <button id="achBack">Back</button>
+</div>
+
+<script>
+// ====== Cached DOM elements ======
+const playerNameEl = document.getElementById('playerName');
+const gamesPlayedEl = document.getElementById('gamesPlayed');
+const totalScoreEl = document.getElementById('totalScore');
+const progressFillEl = document.getElementById('progressFill');
+const progressTextEl = document.getElementById('progressText');
+const difficultyEl = document.getElementById('difficulty');
+const themeSelectorEl = document.getElementById('themeSelector');
+const musicToggleBtn = document.getElementById('musicToggle');
+const profileBtn = document.getElementById('profileBtn');
+const achBtn = document.getElementById('achBtn');
+const boardBtn = document.getElementById('boardBtn');
+
+const gamesDiv = document.getElementById('games');
+const gameAreaEl = document.getElementById('gameArea');
+const gameTitleEl = document.getElementById('gameTitle');
+const scoreEl = document.getElementById('score');
+const timeEl = document.getElementById('time');
+const comboEl = document.getElementById('combo');
+const playFieldEl = document.getElementById('playField');
+const pauseBtn = document.getElementById('pauseBtn');
+const restartBtn = document.getElementById('restartBtn');
+const exitBtn = document.getElementById('exitBtn');
+
+const leaderboardEl = document.getElementById('leaderboard');
+const scoresEl = document.getElementById('scores');
+const boardBackBtn = document.getElementById('boardBack');
+
+const profileEl = document.getElementById('profile');
+const nameInputEl = document.getElementById('nameInput');
+const saveNameBtn = document.getElementById('saveNameBtn');
+const profileBackBtn = document.getElementById('profileBack');
+
+const achievementsEl = document.getElementById('achievements');
+const achListEl = document.getElementById('achList');
+const achBackBtn = document.getElementById('achBack');
+
+// ====== Data (no collisions with DOM ids) ======
+let playerProfile = JSON.parse(localStorage.getItem('profile')) || {
+  name: 'Player' + Math.floor(Math.random()*1000),
+  games: 0,
+  score: 0,
+  ach: {},
+  high: {}
+};
+
+// ====== Audio ======
+const clickSound = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+const bonusSound = new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg');
+const endSound = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+const music = new Audio('https://actions.google.com/sounds/v1/ambiences/game_room_loop.ogg'); music.loop = true;
+let musicOn = false;
+
+// ====== Game system ======
+let score = 0, timeLeft = 0, timer = null, moveTimer = null, combo = 0, paused = false, gameType = '';
+const diff = {
+  easy: {time:15,size:90,speed:1200},
+  medium: {time:10,size:70,speed:800},
+  hard: {time:7,size:50,speed:500}
+};
+
+// ====== Games list ======
+const gameNames = [
+"🎯 Click Box","🟦 Color Match","⚡ Fast Click","🧠 Memory Tap","⚠️ Dodge Box","⚡ Reaction Test",
+"⏱ Timer Clicker","🎨 Quick Tap Colors","🌀 Moving Maze","⬇️ Catch Falling Boxes","🔢 Simon Memory","⚡ Speed Match",
+"🚫 Avoid Red","✌️ Double Tap","⚡ Reaction Test Pro","🎡 Color Spinner","🟢🟥 Double Dodge","🔥 Rapid Tap Combo",
+"✨ Random Flash","🕹 Mini Maze Challenge","🐍 Snake Mini","🎯 Target Frenzy","💨 Speed Runner","🧩 Puzzle Tap","🌈 Rainbow Catch",
+"⚡ Lightning Tap","🎯 Bullseye Mania","🌪️ Tornado Chase","🍎 Fruit Catch","💎 Gem Collector"
+];
+
+// Populate game buttons
+gameNames.forEach((g,i)=>{
+  const btn = document.createElement('button');
+  btn.textContent = g;
+  btn.onclick = () => startGame('game'+(i+1));
+  if (i >= 20) btn.style.border = '2px solid yellow';
+  gamesDiv.appendChild(btn);
+});
+
+// ====== UI initialization ======
+function refreshProfileUI(){
+  playerNameEl.textContent = playerProfile.name;
+  gamesPlayedEl.textContent = playerProfile.games;
+  totalScoreEl.textContent = playerProfile.score;
+}
+refreshProfileUI();
+
+function updateProgress(){
+  const unlocked = gameNames.length; // you could compute unlocked based on achievements
+  const total = 30;
+  const pct = Math.round((unlocked/total)*100);
+  progressFillEl.style.width = pct + '%';
+  progressTextEl.textContent = `Games unlocked: ${unlocked} / ${total}`;
+}
+updateProgress();
+
+// ====== Music ======
+musicToggleBtn.addEventListener('click', ()=> {
+  musicOn ? music.pause() : music.play();
+  musicOn = !musicOn;
+  musicToggleBtn.textContent = musicOn ? '🎵 Music (On)' : '🎵 Music';
+});
+
+// ====== Navigation helpers (no reloads) ======
+function hideAllPanels(){
+  gamesDiv.style.display = '';
+  gameAreaEl.style.display = 'none';
+  leaderboardEl.style.display = 'none';
+  profileEl.style.display = 'none';
+  achievementsEl.style.display = 'none';
+}
+function showHome(){
+  hideAllPanels();
+  gamesDiv.style.display = '';
+  refreshProfileUI();
+  updateProgress();
+}
+function showGameArea(){
+  hideAllPanels();
+  gameAreaEl.style.display = 'block';
+}
+function showLeaderboard(){
+  hideAllPanels();
+  leaderboardEl.style.display = 'block';
+  const data = JSON.parse(localStorage.getItem('scores')) || [];
+  scoresEl.innerHTML = data.sort((a,b)=>b.score-a.score).map(s=>`<p>${s.game} (${s.diff}) — <b>${s.score}</b></p>`).join('') || '<p>No scores yet</p>';
+}
+function showProfile(){
+  hideAllPanels();
+  profileEl.style.display = 'block';
+  nameInputEl.value = playerProfile.name;
+}
+function showAchievements(){
+  hideAllPanels();
+  achievementsEl.style.display = 'block';
+  achListEl.innerHTML = Object.keys(playerProfile.ach).map(a=>`<p>${a}</p>`).join('') || '<p>No achievements yet!</p>';
+}
+
+// Wire navigation buttons
+boardBtn.addEventListener('click', showLeaderboard);
+profileBtn.addEventListener('click', showProfile);
+achBtn.addEventListener('click', showAchievements);
+boardBackBtn.addEventListener('click', showHome);
+profileBackBtn.addEventListener('click', showHome);
+achBackBtn.addEventListener('click', showHome);
+
+// ====== Start / run games ======
+function startGame(type){
+  clearInterval(timer); clearInterval(moveTimer);
+  gameType = type;
+  score = 0; combo = 0; paused = false;
+  const d = diff[difficultyEl.value] || diff.easy;
+  playFieldEl.innerHTML = '';
+  gamesDiv.style.display = 'none';
+  showGameArea();
+
+  scoreEl.textContent = score;
+  timeLeft = d.time;
+  timeEl.textContent = timeLeft;
+  comboEl.textContent = combo;
+  gameTitleEl.textContent = type;
+
+  const num = Number(type.replace('game',''));
+  if (num <= 20){
+    const box = document.createElement('div');
+    box.id = 'box';
+    box.className = 'moving';
+    box.style.width = d.size + 'px';
+    box.style.height = d.size + 'px';
+    box.style.position = 'absolute';
+    playFieldEl.appendChild(box);
+
+    box.addEventListener('click', () => {
+      if (paused) return;
+      try { clickSound.play(); } catch(e) {}
+      score++; combo++;
+      scoreEl.textContent = score;
+      comboEl.textContent = combo;
+      if (combo % 5 === 0) try { bonusSound.play(); } catch(e){}
+      checkHighScore();
+      moveBox(box);
+    });
+
+    moveTimer = setInterval(()=>moveBox(box), d.speed);
+    moveBox(box);
+  } else {
+    startFunGame(num);
+  }
+
+  timer = setInterval(()=> {
+    if (!paused){
+      timeLeft--;
+      timeEl.textContent = timeLeft;
+      if (timeLeft <= 0) endGame();
+    }
+  }, 1000);
+}
+
+function moveBox(box){
+  const rect = playFieldEl.getBoundingClientRect();
+  const w = box.offsetWidth || 50, h = box.offsetHeight || 50;
+  box.style.left = Math.max(0, Math.random()*(rect.width - w)) + 'px';
+  box.style.top = Math.max(0, Math.random()*(rect.height - h)) + 'px';
+  box.style.background = `hsl(${Math.random()*360},100%,50%)`;
+}
+
+// ====== Fun games placeholder (21-30) ======
+function startFunGame(num){
+  playFieldEl.innerHTML = '';
+  switch(num){
+    case 21: alert('Snake Mini: Use arrow keys! Eat food, don\\'t hit walls!'); break;
+    case 22: alert('Rainbow Catch: Catch falling colors!'); break;
+    case 23: alert('Target Frenzy: Hit moving targets!'); break;
+    case 24: alert('Speed Runner: Dodge obstacles!'); break;
+    case 25: alert('Puzzle Tap: Tap correct sequence!'); break;
+    case 26: alert('Lightning Tap: Click appearing boxes fast!'); break;
+    case 27: alert('Bullseye Mania: Hit moving target center!'); break;
+    case 28: alert('Tornado Chase: Dodge spinning obstacles!'); break;
+    case 29: alert('Fruit Catch: Catch fruits, miss = penalty!'); break;
+    case 30: alert('Gem Collector: Collect gems, combos for bonus!'); break;
+    default: alert('Unknown mini-game'); break;
+  }
+}
+
+// ====== High score & leaderboards ======
+function checkHighScore(){
+  playerProfile.high[gameType] = Math.max(playerProfile.high[gameType]||0, score);
+  localStorage.setItem('profile', JSON.stringify(playerProfile));
+}
+
+function saveScore(){
+  const data = JSON.parse(localStorage.getItem('scores')) || [];
+  data.push({game: gameType, score, diff: difficultyEl.value});
+  localStorage.setItem('scores', JSON.stringify(data));
+}
+
+// ====== Pause, restart, end ======
+pauseBtn.addEventListener('click', ()=> {
+  paused = !paused;
+  pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+});
+
+restartBtn.addEventListener('click', ()=> {
+  if (gameType) startGame(gameType);
+});
+
+exitBtn.addEventListener('click', ()=> {
+  endGame(true);
+});
+
+function endGame(silent=false){
+  clearInterval(timer); clearInterval(moveTimer);
+  try { endSound.play(); } catch(e){}
+  playerProfile.games++;
+  playerProfile.score += score;
+  saveScore();
+  checkAchievements();
+  localStorage.setItem('profile', JSON.stringify(playerProfile));
+  if (!silent) alert('Game Over! Score: ' + score);
+  showHome();
+}
+
+// ====== Achievements ======
+function unlock(name){ playerProfile.ach[name] = true; }
+function checkAchievements(){
+  if (playerProfile.games >= 1) unlock('🏆 First Win');
+  if (score >= 10) unlock('⚡ 10 Clicks');
+  if (difficultyEl.value === 'hard' && score > 0) unlock('🔥 Hard Mode');
+  localStorage.setItem('profile', JSON.stringify(playerProfile));
+}
+
+// ====== Profile save ======
+saveNameBtn.addEventListener('click', ()=> {
+  const v = nameInputEl.value.trim();
+  if (v) playerProfile.name = v;
+  localStorage.setItem('profile', JSON.stringify(playerProfile));
+  refreshProfileUI();
+  showHome();
+});
+
+// ====== Theme selector ======
+function setTheme(t){
+  const root = document.documentElement.style;
+  if (t === 'dark'){
+    root.setProperty('--bg1','#000'); root.setProperty('--bg2','#111');
+  } else if (t === 'retro'){
+    root.setProperty('--bg1','#ff9a00'); root.setProperty('--bg2','#ff165d');
+  } else { // neon / default
+    root.setProperty('--bg1','#141e30'); root.setProperty('--bg2','#243b55');
+  }
+}
+themeSelectorEl.addEventListener('change', (e)=> setTheme(e.target.value));
+setTheme('neon');
+
+// ====== Start UI ======
+showHome();
+</script>
+</body>
+</html>7
